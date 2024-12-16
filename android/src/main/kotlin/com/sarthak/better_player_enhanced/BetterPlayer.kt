@@ -1,4 +1,4 @@
-package com.jhomlala.better_player
+package  com.sarthak.better_player_enhanced
 
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
@@ -13,9 +13,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import com.jhomlala.better_player.DataSourceUtils.getUserAgent
-import com.jhomlala.better_player.DataSourceUtils.isHTTP
-import com.jhomlala.better_player.DataSourceUtils.getDataSourceFactory
+import  com.sarthak.better_player_enhanced.DataSourceUtils.getUserAgent
+import  com.sarthak.better_player_enhanced.DataSourceUtils.isHTTP
+import  com.sarthak.better_player_enhanced.DataSourceUtils.getDataSourceFactory
 import io.flutter.plugin.common.EventChannel
 import io.flutter.view.TextureRegistry.SurfaceTextureEntry
 import io.flutter.plugin.common.MethodChannel
