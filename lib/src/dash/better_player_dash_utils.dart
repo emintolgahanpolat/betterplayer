@@ -6,6 +6,8 @@ import 'package:better_player_enhanced/src/core/better_player_utils.dart';
 import 'package:better_player_enhanced/src/hls/hls_parser/mime_types.dart';
 import 'package:xml/xml.dart';
 
+enum _MediaType { audio, video, text }
+
 ///DASH helper class
 class BetterPlayerDashUtils {
   static Future<BetterPlayerAsmsDataHolder> parse(
@@ -17,19 +19,35 @@ class BetterPlayerDashUtils {
       int audiosCount = 0;
       final document = XmlDocument.parse(data);
       final adaptationSets = document.findAllElements('AdaptationSet');
-      adaptationSets.forEach((node) {
-        final mimeType = node.getAttribute('mimeType');
+      adaptationSets.forEach((adaptationNode) {
+        adaptationNode.findAllElements('Representation').forEach(
+          (node) {
+            final mimeType = node.getAttribute('mimeType');
+            final contentType = node.getAttribute('contentType');
+            final codecs = node.getAttribute('codecs');
 
-        if (mimeType != null) {
-          if (MimeTypes.isVideo(mimeType)) {
-            tracks = tracks + parseVideo(node);
-          } else if (MimeTypes.isAudio(mimeType)) {
-            audios.add(parseAudio(node, audiosCount));
-            audiosCount += 1;
-          } else if (MimeTypes.isText(mimeType)) {
-            subtitles.add(parseSubtitle(masterPlaylistUrl, node));
-          }
-        }
+            final mediaType = _getMediaType(
+              mimeType: mimeType,
+              contentType: contentType,
+              codecs: codecs,
+            );
+
+            switch (mediaType) {
+              case _MediaType.audio:
+                audios.add(parseAudio(node, audiosCount));
+                audiosCount += 1;
+                break;
+              case _MediaType.video:
+                tracks.add(parseVideo(node));
+                break;
+              case _MediaType.text:
+                subtitles.add(parseSubtitle(masterPlaylistUrl, node));
+                break;
+              default:
+                break;
+            }
+          },
+        );
       });
     } catch (exception) {
       BetterPlayerUtils.log("Exception on dash parse: $exception");
@@ -38,27 +56,73 @@ class BetterPlayerDashUtils {
         tracks: tracks, audios: audios, subtitles: subtitles);
   }
 
-  static List<BetterPlayerAsmsTrack> parseVideo(XmlElement node) {
-    final List<BetterPlayerAsmsTrack> tracks = [];
+  static _MediaType? _getMediaType({
+    String? mimeType,
+    String? contentType,
+    String? codecs,
+  }) {
+    if (mimeType != null) {
+      // first check mimeType to identify if it is audio, video or text
+      if (MimeTypes.isVideo(mimeType)) {
+        return _MediaType.video;
+      }
+      if (MimeTypes.isAudio(mimeType)) {
+        return _MediaType.audio;
+      }
+      if (MimeTypes.isText(mimeType)) {
+        return _MediaType.text;
+      }
+    }
 
-    final representations = node.findAllElements('Representation');
+    if (contentType != null) {
+      // if mimeType is not present some MPDs content type can be present
+      if (contentType == "video") {
+        return _MediaType.video;
+      }
+      if (contentType == "audio") {
+        return _MediaType.audio;
+      }
+      if (contentType == "text") {
+        return _MediaType.text;
+      }
+    }
 
-    representations.forEach((representation) {
-      final String? id = representation.getAttribute('id');
-      final int width = int.parse(representation.getAttribute('width') ?? '0');
-      final int height =
-          int.parse(representation.getAttribute('height') ?? '0');
-      final int bitrate =
-          int.parse(representation.getAttribute('bandwidth') ?? '0');
-      final int frameRate =
-          int.parse(representation.getAttribute('frameRate') ?? '0');
-      final String? codecs = representation.getAttribute('codecs');
-      final String? mimeType = MimeTypes.getMediaMimeType(codecs ?? '');
-      tracks.add(BetterPlayerAsmsTrack(
-          id, width, height, bitrate, frameRate, codecs, mimeType));
-    });
+    if (codecs != null) {
+      // if there is neither mimeType nor contentType then check codecs
+      if (codecs.startsWith('avc1') ||
+          codecs.startsWith('hev1') ||
+          codecs.startsWith('vp9') ||
+          codecs.startsWith('av01')) {
+        return _MediaType.video;
+      }
+      if (codecs.startsWith('mp4a') ||
+          codecs.startsWith('opus') ||
+          codecs.startsWith('ac-3') ||
+          codecs.startsWith('ec-3')) {
+        return _MediaType.audio;
+      }
+      if (codecs.contains('stpp') || codecs.contains('wvtt')) {
+        return _MediaType.text;
+      }
+    }
+    return null;
+  }
 
-    return tracks;
+  static BetterPlayerAsmsTrack parseVideo(XmlElement representationNode) {
+    final String? id = representationNode.getAttribute('id');
+    final int width =
+        int.parse(representationNode.getAttribute('width') ?? '0');
+    final int height =
+        int.parse(representationNode.getAttribute('height') ?? '0');
+    final int bitrate =
+        int.parse(representationNode.getAttribute('bandwidth') ?? '0');
+    final int frameRate =
+        int.parse(representationNode.getAttribute('frameRate') ?? '0');
+    final String? codecs = representationNode.getAttribute('codecs');
+    final String? mimeType = MimeTypes.getMediaMimeType(codecs ?? '');
+
+    return BetterPlayerAsmsTrack(
+        id, width, height, bitrate, frameRate, codecs, mimeType);
   }
 
   static BetterPlayerAsmsAudioTrack parseAudio(XmlElement node, int index) {
